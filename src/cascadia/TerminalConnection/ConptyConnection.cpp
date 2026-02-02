@@ -52,6 +52,11 @@ namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
             nullptr,
             nullptr));
 
+        // SECURITY NOTE: ExpandEnvironmentStringsW is safe here because:
+        // 1. The command line comes from user profile settings (user-controlled)
+        // 2. Environment variables are from the user's session context
+        // 3. The resulting process runs with user privileges (not elevated)
+        // 4. This is expected behavior for a terminal application
         auto cmdline{ wil::ExpandEnvironmentStringsW<std::wstring>(_commandline.c_str()) }; // mutable copy -- required for CreateProcessW
         auto environment = _initialEnv;
 
