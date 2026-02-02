@@ -424,6 +424,8 @@ order to be effective contributors to our project.
 * [Code Organization](./doc/ORGANIZATION.md)
 * [Exceptions in our legacy codebase](./doc/EXCEPTIONS.md)
 * [Helpful smart pointers and macros for interfacing with Windows in WIL](./doc/WIL.md)
+* [Security Best Practices](./doc/SECURITY_PRACTICES.md) - Guidelines for secure coding
+* [Security Testing Guide](./doc/SECURITY_TESTING.md) - Security testing practices
 
 ---
 
