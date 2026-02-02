@@ -3,6 +3,7 @@
 
 #include "precomp.h"
 #include "../inc/FontResource.hpp"
+#include "../../oss/chromium/base/numerics/checked_math.h"
 
 using namespace Microsoft::Console::Render;
 
@@ -109,17 +110,30 @@ void FontResource::_regenerateFont()
 {
     const auto targetWidth = _targetSize.narrow_width<WORD>();
     const auto targetHeight = _targetSize.narrow_height<WORD>();
-    const auto charSizeInBytes = (targetWidth + 7) / 8 * targetHeight;
+    
+    // Use checked arithmetic to prevent integer overflow in font size calculations
+    // This protects against potential heap corruption if font dimensions are maliciously large
+    base::CheckedNumeric<DWORD> charSizeInBytes = (targetWidth + 7) / 8;
+    charSizeInBytes *= targetHeight;
+    THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !charSizeInBytes.IsValid());
 
-    const DWORD fontBitmapSize = charSizeInBytes * CHAR_COUNT;
-    const DWORD fontResourceSize = sizeof(FONTINFO) + fontBitmapSize;
+    base::CheckedNumeric<DWORD> fontBitmapSize = charSizeInBytes.ValueOrDie();
+    fontBitmapSize *= CHAR_COUNT;
+    THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !fontBitmapSize.IsValid());
+    
+    base::CheckedNumeric<DWORD> fontResourceSize = sizeof(FONTINFO);
+    fontResourceSize += fontBitmapSize.ValueOrDie();
+    THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !fontResourceSize.IsValid());
+    
+    const DWORD fontBitmapSizeValue = fontBitmapSize.ValueOrDie();
+    const DWORD fontResourceSizeValue = fontResourceSize.ValueOrDie();
 
-    auto fontResourceBuffer = std::vector<byte>(fontResourceSize);
+    auto fontResourceBuffer = std::vector<byte>(fontResourceSizeValue);
     void* fontResourceBufferPointer = fontResourceBuffer.data();
     auto& fontResource = *static_cast<FONTINFO*>(fontResourceBufferPointer);
 
     fontResource.dfVersion = 0x300;
-    fontResource.dfSize = fontResourceSize;
+    fontResource.dfSize = fontResourceSizeValue;
     fontResource.dfWeight = FW_NORMAL;
     fontResource.dfCharSet = OEM_CHARSET;
     fontResource.dfPixWidth = targetWidth;
@@ -139,10 +153,18 @@ void FontResource::_regenerateFont()
 
     // Each character has a fixed size and position in the font bitmap, but we
     // still need to fill in the header table with that information.
+    const DWORD charSizeInBytesValue = charSizeInBytes.ValueOrDie();
     for (auto i = 0u; i < std::size(fontResource.dfCharTable); i++)
     {
-        const auto charOffset = fontResource.dfBitsOffset + charSizeInBytes * i;
-        fontResource.dfCharTable[i].geOffset = charOffset;
+        // Use checked arithmetic to prevent overflow when calculating character offset
+        base::CheckedNumeric<DWORD> charOffset = fontResource.dfBitsOffset;
+        base::CheckedNumeric<DWORD> indexOffset = charSizeInBytesValue;
+        indexOffset *= i;
+        THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !indexOffset.IsValid());
+        charOffset += indexOffset.ValueOrDie();
+        THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !charOffset.IsValid());
+        
+        fontResource.dfCharTable[i].geOffset = charOffset.ValueOrDie();
         fontResource.dfCharTable[i].geWidth = targetWidth;
     }
 
@@ -153,7 +175,7 @@ void FontResource::_regenerateFont()
     _resizeBitPattern(fontResourceSpan.subspan(fontResource.dfBitsOffset));
 
     DWORD fontCount = 0;
-    _resourceHandle.reset(AddFontMemResourceEx(&fontResource, fontResourceSize, nullptr, &fontCount));
+    _resourceHandle.reset(AddFontMemResourceEx(&fontResource, fontResourceSizeValue, nullptr, &fontCount));
     LOG_HR_IF_NULL(E_FAIL, _resourceHandle.get());
 
     // Once the resource has been registered, we should be able to create the

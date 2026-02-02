@@ -75,6 +75,14 @@ int __stdcall wWinMain(HINSTANCE, HINSTANCE, LPWSTR cmdline, int)
 
     // Go!
 
+    // SECURITY NOTE: ShellExecuteExW usage here is secure because:
+    // 1. lpFile (cmd) is either:
+    //    a) Constructed from GetCurrentApplicationUserModelId (system API)
+    //    b) Path to WindowsTerminal.exe in same directory as this shim
+    // 2. lpParameters (cmdline) comes from parent Terminal process
+    // 3. UAC elevation prompt (runas verb) provides user consent
+    // 4. This shim's sole purpose is controlled elevation of Terminal
+
     // disable warnings from SHELLEXECUTEINFOW struct. We can't fix that.
 #pragma warning(suppress : 26476) // Expression/symbol '{seInfo.<unnamed-tag>.hIcon = 0}' uses a naked union 'union ' with multiple type pointers: Use variant instead (type.7).
     SHELLEXECUTEINFOW seInfo{};
