@@ -156,8 +156,15 @@ void FontResource::_regenerateFont()
     const DWORD charSizeInBytesValue = charSizeInBytes.ValueOrDie();
     for (auto i = 0u; i < std::size(fontResource.dfCharTable); i++)
     {
-        const auto charOffset = fontResource.dfBitsOffset + charSizeInBytesValue * i;
-        fontResource.dfCharTable[i].geOffset = charOffset;
+        // Use checked arithmetic to prevent overflow when calculating character offset
+        base::CheckedNumeric<DWORD> charOffset = fontResource.dfBitsOffset;
+        base::CheckedNumeric<DWORD> indexOffset = charSizeInBytesValue;
+        indexOffset *= i;
+        THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !indexOffset.IsValid());
+        charOffset += indexOffset.ValueOrDie();
+        THROW_HR_IF(E_ARITHMETIC_OVERFLOW, !charOffset.IsValid());
+        
+        fontResource.dfCharTable[i].geOffset = charOffset.ValueOrDie();
         fontResource.dfCharTable[i].geWidth = targetWidth;
     }
 
